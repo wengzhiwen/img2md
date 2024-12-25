@@ -1,0 +1,6 @@
+python-dotenv
+google-cloud-vision
+google-auth
+google-auth-transport-requests
+google-generativeai
+Pillow

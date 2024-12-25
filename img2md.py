@@ -20,7 +20,7 @@ def format_to_markdown_ref_image(text_content, image_path):
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
     except Exception as e:
-        print(f"加载 Gemini 模型时发生错误: {e}")
+        print(f"Error occurred while loading the Gemini model: {e}")
         return None
     
     try:
@@ -37,7 +37,7 @@ def format_to_markdown_ref_image(text_content, image_path):
         response = model.generate_content(contents)
         return response.text
     except Exception as e:
-        print(f"重新排版时发生错误: {e}")
+        print(f"Error occurred while formatting to markdown: {e}")
         return None
 
 def ocr_by_google_cloud(image_path):
@@ -49,19 +49,19 @@ def ocr_by_google_cloud(image_path):
         with open(image_path, 'rb') as image_path:
             content = image_path.read()
     except Exception as e:
-        print(f"读取图片文件时发生错误: {e}")
+        print(f"Error occurred while OCR image file: {e}")
         return None
 
     try:
         image = vision.Image(content=content)
         response = client.document_text_detection(image=image)
     except Exception as e:
-        print(f"调用 Google Cloud API 时发生错误: {e}")
+        print(f"Error occurred while calling Google Cloud API: {e}")
         return None
 
     if response.error.message:
         raise Exception(
-            'Google Cloud API 错误: {}'.format(
+            'Google Cloud API Error: {}'.format(
                 response.error.message
             )
         )
@@ -76,32 +76,29 @@ if __name__ == '__main__':
 
     img_folder = args.img_folder
     
-    # 检查文件夹是否存在
     if not os.path.exists(img_folder):
-        print(f'指定的文件夹不存在： {img_folder}')
+        print(f'The specified folder does not exist: {img_folder}')
         print('Usage: python img2md.py <img_folder>')
+        print('e.g.: "python img2md.py ." for current folder')
         sys.exit(1)
     
-    # 获取文件夹下所有图片文件, 支持 PNG, JPG, JPEG 格式, 并按文件名排序
     images = sorted(glob.glob(f'{img_folder}/*.png') + glob.glob(f'{img_folder}/*.jpg') + glob.glob(f'{img_folder}/*.jpeg'))
     
-    # 总共要处理N个图片
-    print(f'总共要处理 {len(images)} 张图片')
+    print(f'{len(images)} images to process...')
     
-    # 创建一个img_folder_当前时间戳.md文件
     output_file = f'{img_folder}_{int(time.time())}.md'
     
     try:
         with open(output_file, 'w') as f:
             for img in images:
-                print(f'正在处理 {images.index(img) + 1} / {len(images)}')
+                print(f'Processing {images.index(img) + 1} / {len(images)}')
                 text_content = ocr_by_google_cloud(img)
                 markdown_output = format_to_markdown_ref_image(text_content, img)
                 if markdown_output:
                     f.write(markdown_output)
                     f.write('\n\n')
     except Exception as e:
-        print(f"保存 Markdown 文件时发生错误: {e}")
+        print(f"Error occurred while saving the Markdown file: {e}")
         sys.exit(1)
 
-    print(f'处理完成，结果已保存到 {output_file}')
+    print(f'Processing complete, saved to {output_file}')

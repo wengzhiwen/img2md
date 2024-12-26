@@ -9,6 +9,7 @@ from google.auth.transport.requests import Request
 import google.generativeai as genai
 from google.oauth2 import service_account
 from PIL import Image
+from natsort import natsorted
 
 def translate_markdown(text_content, to_language, image_path):
     genai.configure()
@@ -129,7 +130,9 @@ if __name__ == '__main__':
         print('e.g.: "python img2md.py ." for current folder')
         sys.exit(1)
     
-    images = sorted(glob.glob(f'{img_folder}/*.png') + glob.glob(f'{img_folder}/*.jpg') + glob.glob(f'{img_folder}/*.jpeg'))
+    images = natsorted(glob.glob(f'{img_folder}/*.png') + 
+        glob.glob(f'{img_folder}/*.jpg') + 
+        glob.glob(f'{img_folder}/*.jpeg'))
     print(f'{len(images)} images to process...')
     
     set_google_cloud_api_key_json()

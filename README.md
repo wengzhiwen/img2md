@@ -37,7 +37,7 @@
     ```
     或者顺便翻译一下
     ```bash
-    python img2md.py <img_folder> --trans_to 中文
+    python img2md.py <img_folder> [--trans_to 中文]
     ```
     --trans_to的参数可以使用自然语言（“中文、英语、日语、English”），因为他会是翻译后的文本的文件名的一部分，请不要自己注入攻击自己。
 
@@ -85,7 +85,7 @@ If you have a PDF-file that you want to convert perfectly into Markdown, seee an
     ```
     Or do Translate in the sametime
     ```bash
-    python img2md.py <img_folder> --trans_to English
+    python img2md.py <img_folder> [--trans_to English]
     ```
     Just use human langlage for '--trans_to' argument. e.g. '中文', '日本語', 'English'
 

@@ -10,6 +10,33 @@ import google.generativeai as genai
 from google.oauth2 import service_account
 from PIL import Image
 
+def translate_markdown(text_content, to_language, image_path):
+    genai.configure()
+    GEMINI_MODEL = 'gemini-1.5-pro-002'
+    try:
+        model = genai.GenerativeModel(GEMINI_MODEL)
+    except Exception as e:
+        print(f"Error occurred while loading the Gemini model: {e}")
+        return None
+    
+    try:
+        img = Image.open(image_path)
+        contents = [
+            "请将我提供的 Markdown 格式文本翻译成{}。".format(to_language),
+            f"文本内容：\n\n{text_content}",
+            "同时提供上述文本内容的OCR前的原稿图片，以便更好地理解文本内容和格式。",
+            img,
+            "原稿图片仅供参考，翻译对象仍然是提供的文本内容。",
+            "请注意保持文本的含义，并核对原稿尽可能保持和原稿一致的格式。",
+            "请输出完整的翻译后的 Markdown 格式文本。"
+        ]
+
+        response = model.generate_content(contents)
+        return response.text
+    except Exception as e:
+        print(f"Error occurred while translating Markdown: {e}")
+        return None
+
 def format_to_markdown_ref_image(text_content, image_path):
     genai.configure()
     GEMINI_MODEL = os.getenv('GEMINI_MODEL_FOR_FORMAT_MD', 'gemini-1.5-flash')
@@ -52,7 +79,7 @@ def ocr_by_google_cloud(image_path):
         response = client.document_text_detection(image=image)
     except Exception as e:
         print(f"Error occurred while calling Google Cloud API: {e}")
-        return None
+        raise e
 
     if response.error.message:
         raise Exception(
@@ -90,9 +117,11 @@ def set_google_cloud_api_key_json():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert images(PNG or JPG) to ONE markdown file.')
     parser.add_argument('img_folder', help='Folder for images.')
+    parser.add_argument('--trans_to', help='Translate the content to the specified language.')
     args = parser.parse_args()
 
     img_folder = args.img_folder
+    trans_to = args.trans_to
     
     if not os.path.exists(img_folder):
         print(f'The specified folder does not exist: {img_folder}')
@@ -107,17 +136,39 @@ if __name__ == '__main__':
     
     output_file = f'{img_folder}_{int(time.time())}.md'
     
+    # 如果指定了翻译语言，再创建一个临时文件保存翻译后的内容
+    if trans_to:
+        print(f'Translate to {trans_to}')
+        output_file_trans = f'{img_folder}_{int(time.time())}_{trans_to}.md'
+    
     try:
         with open(output_file, 'w') as f:
-            for img in images:
-                print(f'Processing {images.index(img) + 1} / {len(images)}')
-                text_content = ocr_by_google_cloud(img)
-                markdown_output = format_to_markdown_ref_image(text_content, img)
-                if markdown_output:
-                    f.write(markdown_output)
-                    f.write('\n\n')
+            if trans_to:
+                with open(output_file_trans, 'w') as ft:
+                    for img in images:
+                        print(f'Processing {images.index(img) + 1} / {len(images)}')
+                        text_content = ocr_by_google_cloud(img)
+                        markdown_output = format_to_markdown_ref_image(text_content, img)
+                        if markdown_output:
+                            f.write(markdown_output)
+                            f.write('\n\n')
+                        trans_output = translate_markdown(markdown_output, trans_to, img)
+                        if trans_output:
+                            ft.write(trans_output)
+                            ft.write('\n\n')
+            else:
+                for img in images:
+                    print(f'Processing {images.index(img) + 1} / {len(images)}')
+                    text_content = ocr_by_google_cloud(img)
+                    markdown_output = format_to_markdown_ref_image(text_content, img)
+                    if markdown_output:
+                        f.write(markdown_output)
+                        f.write('\n\n')
     except Exception as e:
         print(f"Error occurred while saving the Markdown file: {e}")
         sys.exit(1)
 
     print(f'Processing complete, saved to {output_file}')
+    
+    if trans_to:
+        print(f'Translated doc saved to {output_file_trans}')

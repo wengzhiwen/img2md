@@ -25,11 +25,11 @@
     pip install -r requirements.txt
     ```
 
-2. 设置API_KEY
+2. 设置GOOGLE_APPLICATION_CREDENTIALS
     ```bash
     cp .env.sample .env
     ```
-    使用你熟悉的编辑器在.env文件中设置你自己的API KEY
+    使用你熟悉的编辑器在.env文件中设置你自己的认证JSON的路径（建议使用绝对路径，方便你在任何地方使用）
 
 3. 运行转换命令：
     ```bash
@@ -55,7 +55,7 @@ And now we support **Translate** function also.
 - Use **Google Gemini AI** to reformat the OCR output for the best Markdown results.
 - Use **Google Gemini AI** for Translate
 
-**See [docs from google](https://cloud.google.com/iam/docs/service-accounts-create) to create JSON file for Auth**
+**See [docs from google](https://cloud.google.com/iam/docs/service-accounts-create) to create JSON file for Google Cloud Auth.**
 
 It also handles **Japanese, Chinese, and other non-English languages** extremely well.  
 
@@ -73,11 +73,11 @@ If you have a PDF-file that you want to convert perfectly into Markdown, seee an
     pip install -r requirements.txt
     ```
 
-2. **Set API KEY**:
+2. **Set GOOGLE_APPLICATION_CREDENTIALS**:
     ```bash
     cp .env.sample .env
     ```
-    Use your preferred text editor to set your own API KEY in the **.env** file.
+    Use your preferred text editor to set your own JSON file for Google Cloud Auth in the **.env** file.
 
 3. **Run the conversion command**:
     ```bash

@@ -7,15 +7,11 @@ from dotenv import load_dotenv
 from google.cloud import vision
 from google.auth.transport.requests import Request
 import google.generativeai as genai
+from google.oauth2 import service_account
 from PIL import Image
 
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-GOOGLE_CLOUD_API_KEY = os.getenv('GOOGLE_CLOUD_API_KEY')
-
 def format_to_markdown_ref_image(text_content, image_path):
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure()
     GEMINI_MODEL = os.getenv('GEMINI_MODEL_FOR_FORMAT_MD', 'gemini-1.5-flash')
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
@@ -41,9 +37,8 @@ def format_to_markdown_ref_image(text_content, image_path):
         return None
 
 def ocr_by_google_cloud(image_path):
-    """Performs document text detection on the image file using API Key."""
-    client_options = {'api_key': GOOGLE_CLOUD_API_KEY}
-    client = vision.ImageAnnotatorClient(client_options=client_options)
+    #client_options = {'api_key': GOOGLE_CLOUD_API_KEY}
+    client = vision.ImageAnnotatorClient()
 
     try:
         with open(image_path, 'rb') as image_path:
@@ -68,6 +63,29 @@ def ocr_by_google_cloud(image_path):
     else:
         return response.full_text_annotation.text
 
+# 检查和设置 Google Cloud API Key json 文件
+def set_google_cloud_api_key_json():
+    # 检查os.environ['GOOGLE_APPLICATION_CREDENTIALS']是否已经设置
+    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+        # 检查设置的文件是否存在
+        if os.path.exists(os.environ['GOOGLE_APPLICATION_CREDENTIALS']):
+            return
+    
+    print('The specified GOOGLE_APPLICATION_CREDENTIALS file does not exist.')
+    print('Load from local .env settings...')
+    
+    load_dotenv()
+    GOOGLE_ACCOUNT_KEY_JSON = os.getenv('GOOGLE_ACCOUNT_KEY_JSON')
+    
+    # 检查GOOGLE_ACCOUNT_KEY_JSON设置的文件是否存在
+    if GOOGLE_ACCOUNT_KEY_JSON is not None and os.path.exists(GOOGLE_ACCOUNT_KEY_JSON):
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_ACCOUNT_KEY_JSON
+        print('Set GOOGLE_APPLICATION_CREDENTIALS to {}'.format(GOOGLE_ACCOUNT_KEY_JSON))
+        return
+    
+    print('The GOOGLE_ACCOUNT_KEY_JSON file: {} does not exist.'.format(GOOGLE_ACCOUNT_KEY_JSON))
+    print('Cannot load GOOGLE_APPLICATION_CREDENTIALS file.')
+    sys.exit(1)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert images(PNG or JPG) to ONE markdown file.')
@@ -83,8 +101,9 @@ if __name__ == '__main__':
         sys.exit(1)
     
     images = sorted(glob.glob(f'{img_folder}/*.png') + glob.glob(f'{img_folder}/*.jpg') + glob.glob(f'{img_folder}/*.jpeg'))
-    
     print(f'{len(images)} images to process...')
+    
+    set_google_cloud_api_key_json()
     
     output_file = f'{img_folder}_{int(time.time())}.md'
     

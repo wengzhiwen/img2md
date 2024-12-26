@@ -175,3 +175,10 @@ cython_debug/
 # System
 *.DS_Store
 .DS_Store
+
+# JSON KEY
+*key.json
+
+# output
+*202*.md
+*202*/

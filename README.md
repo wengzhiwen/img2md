@@ -2,9 +2,9 @@
 将文档的扫描件（图片），转换成markdown格式。
 
  - 使用Google Cloud Vision API进行OCR，获得非常好的OCR效果。
- - 而后利用Google AI Studio（Gemini）对OCR的结果进行重新排版，获得最佳的markdown输出。
+ - 而后利用Google Gemini 对OCR的结果进行重新排版，获得最佳的markdown输出。
 
- **你需要准备好上述两个服务的API KEY**
+ **上述服务都通过Google Cloud获取，请准备Google Cloud的[认证JSON](https://cloud.google.com/iam/docs/service-accounts-create?hl=zh-CN)**
 
 虽然只是重新组合了轮子，但使用此工具获得的输出结果超越了我之前尝试的多个不同的工具。
 
@@ -42,7 +42,9 @@
 Convert scanned document images to markdown format. With AI powered, you will get the bast output ever.
 
 - Use **Google Cloud Vision API** for OCR to achieve excellent recognition results.  
-- Use **Google AI Studio (Gemini)** to reformat the OCR output for the best Markdown results.
+- Use **Google Gemini AI** to reformat the OCR output for the best Markdown results.
+
+**See [docs from google](https://cloud.google.com/iam/docs/service-accounts-create) to create JSON file for Auth**
 
 It also handles **Japanese, Chinese, and other non-English languages** extremely well.  
 

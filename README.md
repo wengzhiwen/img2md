@@ -1,11 +1,9 @@
 # img2md
 将文档的扫描件（图片），转换成markdown格式。
-
-我还画蛇添足追加了翻译功能。
+当前版本只聚焦OCR识别与Markdown排版，不再内置翻译功能。
 
  - 使用Google Cloud Vision API进行OCR，获得非常好的OCR效果。
  - 而后利用Google Gemini 对OCR的结果进行重新排版，获得最佳的markdown输出。
- - 如果要顺便翻译一下的话，翻译功能也是由Google Gemini提供的
 
  **上述服务都通过Google Cloud获取，请准备Google Cloud的[认证JSON](https://cloud.google.com/iam/docs/service-accounts-create?hl=zh-CN)**
 
@@ -35,11 +33,6 @@
     ```bash
     python img2md.py <img_folder>
     ```
-    或者顺便翻译一下
-    ```bash
-    python img2md.py <img_folder> [--trans_to 中文]
-    ```
-    --trans_to的参数可以使用自然语言（“中文、英语、日语、English”），因为他会是翻译后的文本的文件名的一部分，请不要自己注入攻击自己。
 
 程序会按照文件名顺序，一一处理每一个图片文件，并把结果存到同一个markdown文件中。
 生成的markdown文件和你**输入的文件夹同名**，偷懒偷到烂。
@@ -55,24 +48,22 @@
 
 我调试整个整个程序（大约花了一整天的时间反复在调用Vision API）外加OCR大约100页日语PDF文档，花费的金额是66日元（大约3人民币）。并且，因为我是新开的Google Cloud账户，这些点数还是Google赠送的，花不完～完全花不完～～
 
-当然我也没有忘记免费的解决方案：Ollama，但是抱歉我真的没有找到任何一个可以满足要求的模型。但我仍然上传了使用Ollama进行OCR的代码（img2md_ollama.py），开源大模型正在飞速发展，希望很快就能迎来在本地使用Ollama就能完美OCR的那一天。
+当然我也没有忘记免费的解决方案：我保留了一个脚本（img2md_ollama.py），用于调用兼容 OpenAI 接口的本地多模态模型，只需在命令行或环境变量中指定 `--api-url`、`--model` 等参数即可接入你的私有部署服务。
 
 
 # English
 
 Convert scanned document images to markdown format. With AI powered, you will get the bast output ever.
-
-And now we support **Translate** function also.
+The tool now focuses purely on OCR and Markdown formatting without bundled translation.
 
 - Use **Google Cloud Vision API** for OCR to achieve excellent recognition results.  
 - Use **Google Gemini AI** to reformat the OCR output for the best Markdown results.
-- Use **Google Gemini AI** for Translate
 
 **See [docs from google](https://cloud.google.com/iam/docs/service-accounts-create) to create JSON file for Google Cloud Auth.**
 
-It also handles **Japanese, Chinese, and other non-English languages** extremely well.  
+It also handles **Japanese, Chinese, and other non-English languages** extremely well. If you prefer local inference, the helper script `img2md_ollama.py` now targets any **OpenAI-compatible** multimodal endpoint—just provide your own `--api-url` or environment variables.
 
-If you have a PDF-file that you want to convert perfectly into Markdown, seee another tool of mine:  
+If you have a PDF-file that you want to convert perfectly into Markdown, see another tool of mine:  
 [**convert2img**](https://github.com/wengzhiwen/convert2img), which quickly turns PDF-file into a sequence of images that can be fed into **img2md**.
 
 > **Note:** For text-heavy documents, it’s recommended to use higher-resolution images (e.g. **300 dpi**).
@@ -96,13 +87,6 @@ If you have a PDF-file that you want to convert perfectly into Markdown, seee an
     ```bash
     python img2md.py <img_folder>
     ```
-    Or do Translate in the sametime
-    ```bash
-    python img2md.py <img_folder> [--trans_to English]
-    ```
-    Just use human langlage for '--trans_to' argument. e.g. '中文', '日本語', 'English'
 
 The program processes each image file in alphabetical order and saves the output to a single Markdown file.  
 The generated Markdown file has the **same name** as input folder name.
-
-

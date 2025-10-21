@@ -1,177 +1,187 @@
-import glob
+import argparse
+import base64
 import os
 import sys
-import argparse
 import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, List, Optional
+
+import requests
 from dotenv import load_dotenv
-from google.cloud import vision
-from google.auth.transport.requests import Request
-import google.generativeai as genai
-from google.oauth2 import service_account
-from PIL import Image
 from natsort import natsorted
 
-def translate_markdown(text_content, to_language, image_path):
-    genai.configure()
-    GEMINI_MODEL = 'gemini-1.5-pro-002'
+@dataclass
+class OpenAIClientConfig:
+    model: str
+    api_url: str
+    timeout: float
+    api_key: Optional[str] = None
+
+
+def image_to_base64(image_path: Path) -> str:
+    with image_path.open("rb") as img_file:
+        return base64.b64encode(img_file.read()).decode("utf-8")
+
+
+def collect_images(folder: Path) -> List[Path]:
+    patterns = ("*.png", "*.jpg", "*.jpeg")
+    candidates: List[Path] = []
+    for pattern in patterns:
+        candidates.extend(folder.glob(pattern))
+    # Ensure natural order to keep consistent with original script behavior.
+    return [Path(p) for p in natsorted(candidates, key=lambda p: p.name)]
+
+
+def call_openai(*, config: OpenAIClientConfig, images: Optional[Iterable[str]] = None) -> str:
+    headers = {"Content-Type": "application/json"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
+
+    user_content = []
+    user_content.append({
+        "type": "text",
+        "text": "请严格按照系统提示进行OCR识别，不要添加任何解释或说明",
+    })
+    for image_data in images or []:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{image_data}",
+            },
+        })
+
+    system_prompt = """你是一个专业的OCR文本识别专家。
+请仔细观察图像中的文本内容，并尽可能准确地提取所有文本和表格。
+输出应该保持原始文本的格式和结构，包括格式（加粗、斜体、下划线、表格）、段落和标题。
+针对表格的提取，可以采用markdown的语法来表示，特别注意表格的列数（有些表格首行有空单元格，也要算作一列）
+
+请注意：
+1. 仅提取图像中的实际文本，不要添加任何解释或说明
+2. 保持原始语言文本，不要翻译
+3. 尽可能保持原始格式结构，特别是表格，要准确的提取表格中的所有文字
+4. 忽略所有的纯图形内容（比如：logo，地图等，包括页面上的水印）
+5. 忽略所有的页眉和页脚，但保留原文中每页的页码（如果原文中有），严格按照原文中标注的页码来提取（不论原文是否有错）
+6. 如果遇到空白页或整页都是没有意义的内容，请返回：EMPTY_PAGE"""
+
+    payload = {
+        "model": config.model,
+        "messages": [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_content,
+            },
+        ],
+        "stream": False,
+    }
+
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-    except Exception as e:
-        print(f"Error occurred while loading the Gemini model: {e}")
-        return None
-    
-    try:
-        img = Image.open(image_path)
-        contents = [
-            "请将我提供的 Markdown 格式文本翻译成{}。".format(to_language),
-            f"文本内容：\n\n{text_content}",
-            "同时提供上述文本内容的OCR前的原稿图片，以便更好地理解文本内容和格式。",
-            img,
-            "原稿图片仅供参考，翻译对象仍然是提供的文本内容。",
-            "请注意保持文本的含义，并核对原稿尽可能保持和原稿一致的格式。",
-            "请输出完整的翻译后的 Markdown 格式文本。"
-        ]
-
-        response = model.generate_content(contents)
-        return response.text
-    except Exception as e:
-        print(f"Error occurred while translating Markdown: {e}")
-        return None
-
-def format_to_markdown_ref_image(text_content, image_path):
-    genai.configure()
-    GEMINI_MODEL = os.getenv('GEMINI_MODEL_FOR_FORMAT_MD', 'gemini-1.5-flash')
-    try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-    except Exception as e:
-        print(f"Error occurred while loading the Gemini model: {e}")
-        return None
-    
-    try:
-        img = Image.open(image_path)
-        contents = [
-            "请参考以下图片的内容，将我提供的文本重新组织成 Markdown 格式。",
-            img,
-            f"文本内容：\n\n{text_content}",
-            "请注意保持文本的含义，并根据图片内容调整格式和排版风格，例如：图片中有列表，你可以考虑将文本中的相关部分也组织成列表。",
-            "如果文本中包含标题、段落等结构信息，请尽量在 Markdown 中保留。",
-            "请输出完整的 Markdown 格式文本。"
-        ]
-
-        response = model.generate_content(contents)
-        return response.text
-    except Exception as e:
-        print(f"Error occurred while formatting to markdown: {e}")
-        return None
-
-def ocr_by_google_cloud(image_path):
-    #client_options = {'api_key': GOOGLE_CLOUD_API_KEY}
-    client = vision.ImageAnnotatorClient()
+        response = requests.post(config.api_url, headers=headers, json=payload, timeout=config.timeout)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"OpenAI兼容接口请求失败: {exc}") from exc
 
     try:
-        with open(image_path, 'rb') as image_path:
-            content = image_path.read()
-    except Exception as e:
-        print(f"Error occurred while OCR image file: {e}")
-        return None
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("无法解码OpenAI兼容接口的JSON响应") from exc
 
     try:
-        image = vision.Image(content=content)
-        response = client.document_text_detection(image=image)
-    except Exception as e:
-        print(f"Error occurred while calling Google Cloud API: {e}")
-        raise e
+        message = data["choices"][0]["message"]
+    except (KeyError, IndexError) as exc:
+        raise RuntimeError("OpenAI兼容接口响应格式异常") from exc
 
-    if response.error.message:
-        raise Exception(
-            'Google Cloud API Error: {}'.format(
-                response.error.message
-            )
-        )
-    else:
-        return response.full_text_annotation.text
+    content = message.get("content", "")
+    if isinstance(content, list):
+        texts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") in ("text", "output_text"):
+                texts.append(part.get("text", ""))
+        return "".join(texts).strip()
+    if isinstance(content, str):
+        return content.strip()
 
-# 检查和设置 Google Cloud API Key json 文件
-def set_google_cloud_api_key_json():
-    # 检查os.environ['GOOGLE_APPLICATION_CREDENTIALS']是否已经设置
-    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-        # 检查设置的文件是否存在
-        if os.path.exists(os.environ['GOOGLE_APPLICATION_CREDENTIALS']):
-            return
-    
-    print('The specified GOOGLE_APPLICATION_CREDENTIALS file does not exist.')
-    print('Load from local .env settings...')
-    
+    raise RuntimeError("OpenAI兼容接口不支持的消息内容格式")
+
+
+def ocr_with_openai(image_path: Path, *, config: OpenAIClientConfig) -> str:
+    image_base64 = image_to_base64(image_path)
+    return call_openai(config=config, images=[image_base64])
+
+
+def build_output_path(folder: Path, timestamp: int, suffix: Optional[str] = None) -> Path:
+    suffix_part = f"_{suffix}" if suffix else ""
+    filename = f"{folder.name}_{timestamp}{suffix_part}.md"
+    return folder.parent / filename
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="使用兼容 OpenAI 接口的本地多模态模型，将图片（PNG 或 JPG）识别为 Markdown 文本。")
+    parser.add_argument("img_folder", help="包含图片的文件夹。")
+    return parser.parse_args()
+
+
+def run_ocr(img_folder: Path, *, config: OpenAIClientConfig) -> None:
+    images = collect_images(img_folder)
+    if not images:
+        print(f"在 {img_folder} 中未找到图片。支持的格式：png, jpg, jpeg。")
+        sys.exit(0)
+    print(f"共 {len(images)} 张图片待处理...")
+
+    timestamp = int(time.time())
+    output_path = build_output_path(img_folder, timestamp)
+
+    print(f"使用模型 '{config.model}' 通过 {config.api_url}")
+    print(f"将OCR结果写入Markdown文件：{output_path}")
+
+    failures = []
+    try:
+        with output_path.open("w", encoding="utf-8") as ocr_file:
+            for idx, image_path in enumerate(images, start=1):
+                print(f"正在处理 {idx} / {len(images)}: {image_path.name}")
+                try:
+                    text_content = ocr_with_openai(image_path, config=config)
+                except RuntimeError as exc:
+                    print(f"  处理失败 {image_path.name}: {exc}")
+                    failures.append(image_path.name)
+                    continue
+                if text_content:
+                    ocr_file.write(text_content)
+                    ocr_file.write("\n\n")
+    except OSError as exc:
+        print(f"保存Markdown文件时发生错误: {exc}")
+        sys.exit(1)
+
+    print("处理完成。")
+    if failures:
+        print(f"处理完成，有 {len(failures)} 个失败: {', '.join(failures)}")
+    print(f"OCR Markdown已保存到 {output_path}")
+
+
+def main() -> None:
     load_dotenv()
-    GOOGLE_ACCOUNT_KEY_JSON = os.getenv('GOOGLE_ACCOUNT_KEY_JSON')
-    
-    # 检查GOOGLE_ACCOUNT_KEY_JSON设置的文件是否存在
-    if GOOGLE_ACCOUNT_KEY_JSON is not None and os.path.exists(GOOGLE_ACCOUNT_KEY_JSON):
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = GOOGLE_ACCOUNT_KEY_JSON
-        print('Set GOOGLE_APPLICATION_CREDENTIALS to {}'.format(GOOGLE_ACCOUNT_KEY_JSON))
-        return
-    
-    print('The GOOGLE_ACCOUNT_KEY_JSON file: {} does not exist.'.format(GOOGLE_ACCOUNT_KEY_JSON))
-    print('Cannot load GOOGLE_APPLICATION_CREDENTIALS file.')
-    sys.exit(1)
+    args = parse_args()
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Convert images(PNG or JPG) to ONE markdown file.')
-    parser.add_argument('img_folder', help='Folder for images.')
-    parser.add_argument('--trans_to', help='Translate the content to the specified language.')
-    args = parser.parse_args()
-
-    img_folder = args.img_folder
-    trans_to = args.trans_to
-    
-    if not os.path.exists(img_folder):
-        print(f'The specified folder does not exist: {img_folder}')
-        print('Usage: python img2md.py <img_folder>')
-        print('e.g.: "python img2md.py ." for current folder')
-        sys.exit(1)
-    
-    images = natsorted(glob.glob(f'{img_folder}/*.png') + 
-        glob.glob(f'{img_folder}/*.jpg') + 
-        glob.glob(f'{img_folder}/*.jpeg'))
-    print(f'{len(images)} images to process...')
-    
-    set_google_cloud_api_key_json()
-    
-    output_file = f'{img_folder}_{int(time.time())}.md'
-    
-    # 如果指定了翻译语言，再创建一个临时文件保存翻译后的内容
-    if trans_to:
-        print(f'Translate to {trans_to}')
-        output_file_trans = f'{img_folder}_{int(time.time())}_{trans_to}.md'
-    
-    try:
-        with open(output_file, 'w') as f:
-            if trans_to:
-                with open(output_file_trans, 'w') as ft:
-                    for img in images:
-                        print(f'Processing {images.index(img) + 1} / {len(images)}')
-                        text_content = ocr_by_google_cloud(img)
-                        markdown_output = format_to_markdown_ref_image(text_content, img)
-                        if markdown_output:
-                            f.write(markdown_output)
-                            f.write('\n\n')
-                        trans_output = translate_markdown(markdown_output, trans_to, img)
-                        if trans_output:
-                            ft.write(trans_output)
-                            ft.write('\n\n')
-            else:
-                for img in images:
-                    print(f'Processing {images.index(img) + 1} / {len(images)}')
-                    text_content = ocr_by_google_cloud(img)
-                    markdown_output = format_to_markdown_ref_image(text_content, img)
-                    if markdown_output:
-                        f.write(markdown_output)
-                        f.write('\n\n')
-    except Exception as e:
-        print(f"Error occurred while saving the Markdown file: {e}")
+    img_folder = Path(args.img_folder).expanduser().resolve()
+    if not img_folder.exists() or not img_folder.is_dir():
+        print(f"指定的文件夹不存在或不是目录: {img_folder}")
+        print("用法: python img2md.py <img_folder>")
+        print('例如: "python img2md.py ." 处理当前文件夹')
         sys.exit(1)
 
-    print(f'Processing complete, saved to {output_file}')
-    
-    if trans_to:
-        print(f'Translated doc saved to {output_file_trans}')
+    api_url = os.getenv("BASE_URL")
+    model = os.getenv("MODEL_FOR_OCR")
+    api_key = os.getenv("API_KEY_FOR_OCR")
+    timeout = float(os.getenv("TIMEOUT_FOR_OCR", "120"))
+
+    client_config = OpenAIClientConfig(model=model, api_url=api_url, timeout=timeout, api_key=api_key)
+
+    run_ocr(img_folder, config=client_config)
+
+
+if __name__ == "__main__":
+    main()
